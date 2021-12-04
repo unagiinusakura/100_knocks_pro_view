@@ -1,0 +1,1334 @@
+Python 実践データ加工/可視化
+第一部：構造化データ
+
+第1章:システムデータの可能・可視化を行うノック20本
+
+ ノック1:法人データを読み込んでみよう
+  ・読み込み文字コードは引数encoding='shift-jis'で変更する
+  ・データにヘッダーが無い場合は引数header=None
+    import pandas as pd
+    data = pd.read_csv('100knock-process-visualization/chapter-1/data/22_shizuoka_all_20210331.csv',
+                       encoding='shift-jis', header=None,dtype=object)
+                     
+  ・データの先頭と末尾を確認する
+    data.head()
+    data.tail()
+    
+  ・レコード件数を確認する
+    len(data)
+      
+    
+ ノック2:読み込んだデータを確認する
+  ・項目名と項目数を確認する
+    data.columns
+    len(data.columns)
+    
+  ・各項目のデータ型を確認する
+    data.dtypes
+    
+  ・データ型を指定してデータを読み込むには引数 dtype=object   
+    data = pd.read_csv('100knock-process-visualization/chapter-1/data/22_shizuoka_all_20210331.csv',
+                       encoding='shift-jis', header=None,dtype=object) 
+ 
+ ノック3:ヘッダ用のテキストファイルを読み込む
+  ・データがタブ区切り(\t)の場合は引数 sep='\t'
+    mst = pd.read_csv('100knock-process-visualization/chapter-1/data/mst_column_name.txt',
+                      encoding='shift-jis',sep='\t')
+ 
+  ・データ件数の比較 
+    len(mst)== len(data.columns)
+  
+ ノック4:ヘッダ行を追加しよう
+  ・縦持ちデータから値を取り出しを他dfのカラムとして使う
+    columns = mst['column_name_en'].values
+    data.columns = columns
+    
+    
+ ノック5:統計量や欠損値を確認する
+  ・統計量を確認する
+    data.describe()
+    
+  ・欠損値を確認する
+    data.isna()
+    ※pnadasは読み込んだデータに欠損値がある場合、NaNを表示する
+          
+  ・欠損値の数を項目ごとに集計する
+    data.isna().sum()
+    
+ ノック6:繰り返し処理で新しいデータを追加しよう
+  ・引数で渡されたフォルダの中にあるファイルとフォルダの一覧を表示
+    import os
+    os.listdir('100knock-process-visualization/chapter-1/data')    
+ 
+  ・.csvだけのファイルパス一覧を取得する
+    from glob import glob
+    diff_files = glob('100knock-process-visualization/chapter-1/data/diff*.csv')
+    diff_files
+ 
+  ・.locでデータを絞り込み確認する
+    diff = diff.loc[diff['prefectureName'] == '静岡県']
+    print(len(diff))
+    diff.head(3)
+ 
+  ・データを結合する
+    data_test = data_test.append(diff) 
+ 
+  ・for文つかって連続でデータを作成する
+    for f in diff_files:
+    	diff = pd.read_csv(f, encoding='shift-jis', header=None, dtype=object)
+    	diff.columns = columns
+    	diff = diff.loc[diff['prefectureName']=='静岡県']
+    data = data.append(diff)
+    data    
+ 
+  ・重複するデータを確認するにはduplicated()
+    print(data[data['corporateNumber'].duplicated()])
+ 
+ 
+  ・重複データ削除するにはdrop_duplicates() 引数subsetで項目名、keep='last'で重複した場合に最終行を残す
+    data.drop_duplicates(subset='corporateNumber',keep='last', inplace=True)
+ 
+ ノック7:マスタを読み込んで項目を横に繋げよう
+  ・横にデータをマージする
+    data = data.merge(mst_process_kbn, on='process', how='left')
+ 
+ ノック8:テキストの連結や分割をしよう 
+  ・テキストデータを連結する
+    data['address'] = data['prefectureName'] + data['cityName'] + data['streetNumber']
+    ※区切り文字を入れたい場合は+'\\'+
+    
+    連結する項目に欠損値があるある場合、連結結果も欠損値になる
+    
+  ・欠損値のデータ箇所を抽出しデータ補間する
+    data['address'].loc[data['address'].isna()] = data['prefectureName'] + data['cityName']
+        
+  ・テキストデータを分割する
+     data['postCode_head'] = data['postCode'].str[:3]
+ 
+ ノック9:日付を加工しよう
+  ・データを日付型に変更する
+    tmp = pd.to_datetime(data['closeDate'])
+ 
+  ・連続してデータを日付型に変更する
+    dt_columns = ['updateDate', 'changeDate', 'closeDate', 'assignmentDate']
+    for col in dt_columns:
+    	data[col] = pd.to_datetime(data[col])
+    	
+  ・日付型データを計算する
+    data['corporate_life'] = data['closeDate'] - data['assignmentDate']
+ 
+  ・欠損値でないデータに絞って表示する
+    tmp = data.loc[data['closeDate'].notna()]
+ 
+  ・関連データのデータ数が同じかを確認する
+   len(data.loc[data['closeCause'].notna()]) == len(data.loc[data['closeDate'].notna()])
+ 
+  ・日付項目の値を利用して年月形式に変換する(日付データを丸める)
+   data['update_YM'] = data['updateDate'].dt.to_period('M')
+ 
+  ・連続して日付データを年月形式に変換する
+   dt_prefixes = ['assignment', 'change', 'update', 'close']
+   for pre in dt_prefixes:
+       data[f'{pre}_YM'] = data[f'{pre}Date'].dt.to_period('M')
+ 
+ノック10:年度を設定しよう 
+  ・日付項目から年、月を単体で取得する(.DatetimeIndex()関数を使う) 
+    data['update_year'] = pd.DatetimeIndex(data['updateDate']).year # 更新日付から年を取得
+    data['update_month'] = pd.DatetimeIndex(data['updateDate']).month # 更新日付から月を取得
+ 
+  ・更新月が3月までは更新年度を-1する
+    data.loc[data['update_month'] < 4, 'update_fiscal_year'] -= 1   
+ 
+  ・年度の計算があっているか確認する
+    for i in range(12):
+        display(data[['update_YM', 'update_fiscal_year']].loc[data['update_month'] == i+1][:1]) 
+    
+    ※display()は処理の途中で画面出力する際の記述方法
+    
+ノック11:加工したデータをファイルに出力しよう 
+  ・フォルダの作成する 
+   output_dir = '100knock-process-visualization/chapter-1/data/output'
+   os.makedirs(output_dir, exist_ok=True) #exist_ok=Trueで対象フォルダが既存でもエラーにならない
+   
+  ・csvファイルを出力する
+   output_file = 'processed_shizuoka.csv'
+   data.to_csv(os.path.join(output_dir,output_file),index=False)
+   ※os.path.join()関数でフォルダとファイル名を連結
+   
+  ・excelファイルを出力する 
+   output_file = output_file.replace('.csv','.xlsx')
+   data.to_excel(os.path.join(output_dir, output_file), index=False)
+   
+   
+ノック12:不要な項目の削除と並べ替えをしよう
+  ・不要な項目を削除する
+   data = data[['cityName', 'corporateNumber', 'name', 'corp_kind_name', 'process',
+         'process_kbn_name', 'assignmentDate', 'updateDate', 'update_fiscal_year', 'update_YM']]
+         
+  ・1項目だけ削除する場合 
+   data = data.drop(columns = 'process')
+   
+ノック13:まとまった単位で集計しよう
+  ・グループ化してデータ件数を調べる
+   tmp = data.groupby('corp_kind_name').size()            
+            
+  ・データを並べ替える
+   tmp.sort_values(inplace=True, ascending=False)
+
+  ・複数項目のグループ化
+   tmp = data.groupby(['update_fiscal_year', 'corp_kind_name']).size()
+   
+  ・ピボットテーブルを使った集計
+     pt_data = pd.pivot_table(data, index='corp_kind_name', columns='update_fiscal_year', aggfunc='size') 
+     
+ノック14:市区町村の法人数を可視化しよう
+  ・matplotlibをimport(日本語対応)
+    import matplotlib.pyplot as plt
+    plt.rcParams['font.family'] = "MS Gothic"
+    %matplotlib inline 
+
+  ・棒グラフの表示
+    x = tmp.index
+    y = tmp.values
+    plt.bar(x,y)
+            
+  ・グラフのサイズを変更して表示
+    plt.figure(figsize=(20, 10))
+    plt.bar(x, y)
+    
+    
+ノック15:グラフの縦横と表示順を変えてみよう
+  ・横向きの棒グラフを表示
+   plt.figure(figsize=(10, 15))
+   x = tmp.index
+   y = tmp.values
+   plt.barh(x,y)
+
+
+ノック16:グラフのタイトルとラベルを設定しよう
+  ・タイトル、x軸、y軸のラベル設定してグラフ表示
+   plt.figure(figsize=(20, 10))
+   plt.bar(x, y)
+   plt.title('市区町村別の法人数',fontsize=20)
+   plt.xlabel('市区町村',fontsize=15)
+   plt.ylabel('法人数')
+   
+   
+ノック17:グラフの見た目をもっと変えてみよう
+  ・特定箇所の棒グラフの色を変える
+    x = tmp.index
+    y = tmp.values
+    fig, ax = plt.subplots(figsize=(20,10))
+    bar_list =ax.bar(x, y, color='lightgray')  # ひとつひとつの棒をbar_listに設定している
+    bar_list[4].set_color('blue')              # 特定の箇所で色を変更する
+    ax.set_title('自治体法人数における富士市の位置づけ', fontsize=20);
+    ax.set_ylabel('法次数',fontsize=15)
+    ax.text(7.5, 9000, '上位10の自治体を抜粋して表示',fontsize=15)  # テキスト表示
+    
+                               
+ノック18:90日以内に新規登録された法人数を可視化しよう
+  ・現在日時を取得
+   base_time = pd.Timestamp.now(tz='Asia/Tokyo')
+   
+   
+  ・日付データをタイムゾーンありデータ型に変換
+   data['assignmentDate'] = data['assignmentDate'].dt.tz_localize('Asia/Tokyo')
+
+  ・timedeltaを使って日付データの絞りこみを行う
+   delta = pd.Timedelta(360, 'days')
+   tmp = data.loc[(data['process_kbn_name'] == '新規') & (base_time - data['assignmentDate'] <= delta)]
+   
+  ・基準となる日付を手入力する
+   base_time = pd.Timestamp('2020-04-16', tz='Asia/Tokyo') #この部分が手入力
+   tmp = data.loc[(data['process_kbn_name'] == '新規') & (base_time - data['assignmentDate'] <= delta)]
+   
+   
+ノック19:年度別の推移を可視化しよう
+  ・正規表現使って[区で終わる]条件を絞り込む
+   tmp = data.dropna(subset=['cityName'])
+   tmp = tmp.loc[tmp['cityName'].str.match('^.*区$')] 
+   
+  ・対象年月を複数条件で絞り込む
+   tmp = tmp.loc[(tmp['update_fiscal_year'] >= 2016) & (tmp['update_fiscal_year'] < 2021)]
+   
+  ・seaborn使ってグラフを表示する
+   import seaborn as sns
+   
+   #軸の目盛を設定する  
+   from matplotlib.ticker import MaxNLocator  
+   
+   #年度の型がint型なのでそのまま描画すると2016.0なり余計な小数点が入るのを変更する
+   
+   plt.figure(figsize=(20, 10))
+   
+   #年度の型がint型なのでそのまま描画すると2016.0なり余計な小数点が入るのを変更する
+   plt.gca().xaxis.set_major_locator(MaxNLocator(integer=True))
+   img = sns.lineplot(x=tmp['update_fiscal_year'], y=tmp['count'], hue=tmp['cityName'])
+   
+   
+ノック20:グラフとデータを出力しよう
+  ・pngファイルで保存する
+    graph_file = 'knock20_graph.png'
+    fig = img.get_figure()
+    fig.savefig(os.path.join(output_dir, graph_file))  
+    
+第2章:システムデータの可能・可視化を行うノック20本    
+
+ノック21:Excelデータを読み込んでみよう
+    import pandas as pd
+    data = pd.read_excel('100knock-process-visualization/chapter-2/data/1-2-2020.xlsx')
+    data.head()
+    
+  ・データをスキップしてheader無で再度読み込む
+    data = pd.read_excel('100knock-process-visualization/chapter-2/data/1-2-2020.xlsx', skiprows=4, header=None)   
+    
+  ・最終行の4行を削除する
+    data.drop(data.tail(4).index, inplace=True) 
+    
+ノック22:カラムを抽出して付与してみよう
+  ・excelセル結合の行方法を処理する
+    # 1行目の欠損値に0行目の値を入れる
+    col_data.iloc[1,1:].fillna(col_data.iloc[0,1:], inplace=True)
+    
+    # 1行目の発電所の文字を削除する
+    col_data.iloc[1,1:] = col_data.iloc[1,1:].str.replace('発電所','')
+    
+  ・excelセル結合の列方法を処理する 
+    # 欠損している値には左側の列の値を埋める
+    for i in col_data.columns:
+    if i < col_data.columns.max():
+        col_data[i+1].fillna(col_data[i], inplace=True)
+    col_data  
+    
+  ・文字列を指定文字に置き換える
+    col_data.replace('〔バイオマス〕','バイオマス',inplace=True)
+    col_data.replace('〔廃棄物〕','廃棄物',inplace=True)    
+    
+  ・行方向にデータを結合してカラム名リストを作成する
+    cols = []
+    for i in col_data.columns:
+        tg_col = '_'.join(list(col_data[i].dropna()))
+        cols.append(tg_col)
+    cols    
+                       
+  ・カラムを設定する
+    data.columns = cols
+    
+ノック23:全シートのデータを読み込んでみよう    
+  ・Excelを読み込みシート名を取得する
+    xl = pd.ExcelFile('100knock-process-visualization/chapter-2/data/1-2-2020.xlsx')
+    sheets = xl.sheet_names  
+    
+  ・Excelシートを全部読み取りlistに結合
+    datas = []
+    for sheet in sheets:
+    	data = xl.parse(sheet, skiprows=4, header=None)
+    	data.drop(data.tail(4).index, inplace=True)
+    	data.columns = cols
+    	data['年月'] = sheet
+    	datas.append(data)
+    datas   
+
+  ・リストデータをcancat関数で結合   
+    datas = pd.concat(datas, ignore_index=True)
+        
+ノック24:データの値を計算で修正しよう     
+  ・pandasでは列ごとに四則演算が可能
+    datas['bb'] = datas['a'] - datas['b'] - datas['c']  
+   
+ノック25:必要なカラムだけに絞り込もう 
+  ・dropをつかう場合は指定しないと行の削除、列削除の場合はaxis=1とする
+   datas.drop(['合計_合計_発電所数','合計_合計_最大出力計'],axis=1, inplace=True)
+  
+ノック26:縦持ちデータを作成しよう
+  ・melt関数使ってデータを縦持ちにする
+  datas_v = pd.melt(datas, id_vars=['都道府県','年月'], var_name='変数名',value_name='値')
+
+ノック27:縦持ちデータを整形しよう
+  ・str.splitを使って特定の文字列を区切る
+  var_data = datas_v['変数名'].str.split('_',expand=True) #expand=Trueで列ごとに区切る
+
+ノック28:発電実績データを加工しよう
+
+ノック29:可視化用データを仕上げよう
+  ・縦持ちデータをpivot_tableを使って横持ち表示する
+   pd.pivot_table(datas_v_all.loc[datas_v_all['年月']=='2020.4'], index='発電所種別',columns='項目',values='値',aggfunc='sum')
+   
+ノック30:データの分布をヒストグラムで可視化しよう
+  ・matplotlibで日本語表示できるようにフォントを指定する
+   import matplotlib.pyplot as plt
+   plt.rcParams['font.family'] = "MS Gothic"
+   import seaborn as sns
+
+   %matplotlib inline
+
+  ・データの全体像を見る
+   plt.figure(figsize=(20,10))
+   sns.histplot(datas_v_all.loc[datas_v_all['項目']=='発電所数'])
+
+  ・0を除外してグラフを並べる
+  fig, axes = plt.subplots(1, 3, figsize=(30, 10))
+  viz_data = datas_v_all.loc[datas_v_all['値']!=0]
+  sns.histplot(viz_data.loc[viz_data['項目']=='発電所数'], ax=axes[0])
+  sns.histplot(viz_data.loc[viz_data['項目']=='最大出力計'], ax=axes[1])
+  sns.histplot(viz_data.loc[viz_data['項目']=='電力量'], ax=axes[2])
+
+ノック31:データの分布を箱ひげ図で可視化してみよう
+  ・1個のデータを箱ひげ図で可視化
+   plt.figure(figsize=(10, 10))
+   viz_data = datas_v_all.loc[(datas_v_all['項目']=='発電所数')&(datas_v_all['値']!=0)]
+   sns.boxplot(y=viz_data['値']) 
+   
+  ・複数のデータを箱ひげ図で可視化
+   plt.figure(figsize=(30, 10))
+   sns.boxplot(x=viz_data['発電種別'],y=viz_data['値'])
+   
+ノック32:最近の発電量を可視化しよう
+  ・項目ごとに集計して棒グラフで見る
+  viz_data = datas_v_all[['発電種別','値']].loc[(datas_v_all['項目']=='電力量')&(datas_v_all['年月']=='2021.1')]
+  viz_data = viz_data.groupby('発電種別',as_index=False).sum()
+  sns.barplot(x=viz_data['発電種別'], y=viz_data['値'])
+  
+ノック33:先月の発電量とあわせて可視化してみよう      
+  ・項目ごとで且つ月別を比較するグラフを作成する
+  viz_data = viz_data.loc[(viz_data['年月']=='2020.12') | (viz_data['年月']=='2021.1')]
+  sns.barplot(x=viz_data['発電種別'], y=viz_data['値'], hue=viz_data['年月'])
+  
+ノック34:電力の時系列変化を可視化してみよう
+  ・時系列の可視化には折れ線グラフをつかう
+    plt.figure(figsize=(15,5))
+    viz_data = datas_v_all[['発電種別','年月','値']].loc[(datas_v_all['項目']=='電力量')]
+    viz_data = viz_data.groupby('年月',as_index=False).sum()
+    viz_data['年月'] = pd.to_datetime(viz_data['年月']) # データ型に変換
+    sns.lineplot(x=viz_data['年月'], y=viz_data['値'])
+
+ノック35:電力の割合を可視化してみよう
+  ・割合を求める(個別の値を全体で割る)
+   viz_data = datas_v_all.loc[(datas_v_all['項目']=='電力量')&(datas_v_all['年月']=='2021.1')]
+   viz_data = viz_data[['発電種別','値']].groupby('発電種別').sum()
+   viz_data['割合'] = viz_data['値'] / viz_data['値'].sum()
+
+  ・割合を可視化する時は円グラフでなく積み上げ棒グラフ
+   #データを一旦横持ちにしてpandasグラフでつみあげる
+   viz_data.T.loc[['割合']].plot(kind='bar', stacked=True)
+   
+ノック36:電力量の多い都道府県を比較してみよう   
+  ・バブルチャートを可視化する
+   sns.relplot(x=viz_data_join['年月'],y=viz_data_join['電力量'],
+            hue=viz_data_join['都道府県'],size=viz_data_join['発電所数'],
+            alpha=0.5, height=5, aspect=2)
+
+
+ノック37:都道府県、年月別の電力量を可視化してみよう
+  ・ピボットテーブルを作成してマトリックス表を作成する
+   viz_data = datas_v_all[['都道府県','年月','値']].loc[datas_v_all['項目']=='電力量']
+   viz_data = viz_data.groupby(['年月','都道府県'],as_index=False).sum()
+   viz_data['年月'] = pd.to_datetime(viz_data['年月']).dt.date
+   viz_data = viz_data.pivot_table(values='値', columns='年月', index='都道府県')
+
+   plt.figure(figsize=(10,10))
+   sns.heatmap(viz_data)
+
+ノック38:変数の関係性を可視化してみよう
+  ・変数の関係性を可視化する
+    sns.scatterplot(x=viz_data['水力発電所_水力_発電所数'], y=viz_data['水力発電所_水力_最大出力計'])
+
+  ・散布図とヒストグラムを合わせたグラフ
+   sns.jointplot(x=viz_data['水力発電所_水力_発電所数'], y=viz_data['水力発電所_水力_最大出力計'])
+   
+  ・ペアプロットを見る
+    sns.pairplot(viz_data.iloc[:,0:4])
+
+ノック39:データを整形してExcel形式で出力しよう
+  ・pivotしてからデータをoutput
+   output = datas_v_all.pivot_table(values='値',columns='項目',index=['年月','都道府県'],aggfunc='sum')
+   output.to_excel('100knock-process-visualization/chapter-2/data/summary_data.xlsx')
+
+
+ノック40:シート別にExcelデータを出力しよう
+  ・forループで条件別にdfを作成し、1個のexcelファイルにシートを追加する
+  writer = pd.ExcelWriter('100knock-process-visualization/chapter-2/data/detail_data.xlsx', engine="openpyxl", mode='w')
+  with writer as w:
+      for target in datas_v_all['都道府県'].unique():    
+          tmp = datas_v_all.loc[datas_v_all['都道府県']==target]
+          tmp = tmp.pivot_table(values='値',columns=['発電種別','項目'],index=['年月'], aggfunc='sum')
+          tmp.to_excel(w, sheet_name=target)
+
+
+第3章:時系列データの加工・可視化を行う10本ノック
+
+ノック41:時系列データを読み込んでみよう
+  ・object型をdetetime型に変換する
+   data['receive_time'] = pd.to_datetime(data['receive_time'])
+
+  ・データの読み込み時にdatetime型で読み込む
+   data = pd.read_csv(files[0], parse_dates=['receive_time'])
+  
+  ・複数データを読み込みデータを結合する
+    data = []
+    for f in files:
+        tmp = pd.read_csv(f, parse_dates=['receive_time'])
+        data.append(tmp)
+    data = pd.concat(data,ignore_index=True)
+    display(data.head())
+  
+ノック42:日付の範囲を確認しよう  
+  ・データ範囲を確認する
+    print(data['receive_time'].max() - data['receive_time'].min()) 
+  
+ノック43:日毎のデータ件数を確認しよう  
+  ・日付データを日単位データに変換
+    data['receive_date'] = data['receive_time'].dt.date
+  
+ノック44:日付から曜日を算出しよう  
+  ・曜日を数値と名前で算出する  
+    data['dayofweek'] = data['receive_time'].dt.dayofweek #0番目が月曜日、1番目が火曜日
+    data['day_name'] = data['receive_time'].dt.day_name()
+  
+  ・日付ごとにユニークになるように重複を消す
+     data[['receive_date','dayofweek','day_name']].drop_duplicates(subset='receive_date').head(10)
+  
+ノック45: 特定範囲のデータに絞り込もう  
+  ・日付データを指定してデータを絞り込む
+     import datetime as dt
+     data_extract = data.loc[(data['receive_time']>=dt.datetime(2021,1,20))&
+                        (data['receive_time']<dt.datetime(2021,1,23))].copy()
+     
+  
+ノック46: 秒単位のデータを作成しよう  
+  ・ミリ秒を秒単位に変換するにはroundを使う
+  data_extract['receive_time_sec'] = data_extract['receive_time'].dt.round('S')
+  
+  ・重複があるか確認する
+    print(len(data_extract))
+    print(len(data_extract['receive_time_sec'].unique()))
+  
+  ・重複データを確認する
+    # keep=Falseにする。重複データの片方しかFalseにならない
+    data_extract[data_extract['receive_time_sec'].duplicated(keep=False)].head()
+  
+  ・ミリ秒を秒単位に変換するにはfloorで切り捨てを行う 
+    data_extract['receive_time_sec'] = data_extract['receive_time'].dt.floor('S')
+
+ノック47:秒単位のデータを整形してみよう
+  ・あらかじめ1秒間隔の日付データを作成しそこにデータ結合する
+  
+  ・日付データのベースとなるDFを作成する
+    print(pd.date_range('2021-01-15', '2021-01-16', freq='S')) #確認
+    base_data = pd.DataFrame({'receive_time_sec':pd.date_range(min_receive_time,max_receive_time,freq='S')})
+    
+  ・データのマージ
+    data_base_extract = pd.merge(base_data, data_extract, on='receive_time_sec', how='left')
+    display(data_base_extract.isna().sum()) #欠損の確認
+    
+ノック48:秒間の欠損データを処理しよう    
+        
+  ・欠損値のデータ補間する方法としては
+   ①:0やデータの平均値等の特定値で埋める方法
+   ②:1つ前もしくは後ろのデータを埋める方法
+   ③:線形補間等で前後関係から計算した結果で埋める方法
+   
+   ①は売上データ等で使用することが多い
+   ②③は時系列データで使用される事が多い
+   加速度データや温度データなどは線形補間することが一般的。interpolate()を使用する      
+      
+  ・fillnaで前方のデータ補間する
+   data_base_extract.sort_values('receive_time_sec',inplace=True)
+   data_base_extract = data_base_extract.fillna(method='ffill')     
+
+ノック49:通った人数を可視化しよう
+  ・データを１つ下にずらす
+  data_before_1sec = data_analytics.shift(1)
+  
+  ・元データと１つずらしたデータをconcatで横に結合する
+   data_before_1sec.columns = ['receive_time_sec_b1sec','in1_b1sec','out1_b1sec']
+   data_analytics = pd.concat([data_analytics, data_before_1sec],axis=1)
+
+  ・元データと１つずらしたデータから引き算する
+   data_analytics['in1_calc'] = data_analytics['in1'] - data_analytics['in1_b1sec']
+   data_analytics['out1_calc'] = data_analytics['out1'] - data_analytics['out1_b1sec']
+    
+  ・秒単位のデータをstrftimeによって時単位で文字列変換する
+   data_analytics['date_hour'] = data_analytics['receive_time_sec'].dt.strftime('%Y%m%d%H')
+
+  ・可視化用にデータを縦持ちにする
+    viz_data = data_analytics[['date_hour','in1_calc', 'out1_calc']].groupby('date_hour', as_index=False).sum()
+    viz_data = pd.melt(viz_data, id_vars='date_hour', value_vars=['in1_calc','out1_calc'])
+
+ノック50:移動平均を計算して可視化しよう
+  ・3時間移動平均をだす
+   viz_data_rolling = viz_data[['in1_calc','out1_calc']].rolling(3).mean()
+   
+【第2部 非構造化データ】
+
+第4章:言語データの加工・可視化を行う10本ノック
+
+ノック５１：テキストファイルを読み込もう   
+    path = '100knock-process-visualization/chapter-4/data/hashire_merosu.txt'
+    with open(path,mode='r', encoding='shift-jis') as f:
+        content = f.read()
+    print(content)  
+
+ノック５２：本文を抽出して１つに纏めよう
+  ・1行ずつ改行してあるデータを行単位で分割した上で1個に繋げる
+    content = ' '.join(content.split())
+    # split()は引数を省略するとスペースや改行、タブといった空白文字で分割する
+       
+  ・文字の正規化を行う  
+   import unicodedata
+   content = unicodedata.normalize('NFKC', content) # 数値は半角、カナは全角で統一
+   
+  ・あるパターンに該当する部分を取得する
+   import re
+   pattern = re.compile(r'^.+(#地から1字上げ].+#地から1字上げ]).+$')
+   body = re.match(pattern, content).group(1)  
+   
+   # re.compile(r'^.+(AAA.+BBB).+$')  
+   # AAAとBBBは任意のテキストを設定でき、AAAから始まってBBBで終わるというパターンが出来る
+   
+  ・不要な部分は置換で置き換え
+   body = body.replace(' [#地から1字上げ]', '')
+
+ノック５３：本文以外の項目を取り出そう
+  ・データを1行ずつ読み込む
+   with open(path,mode='r', encoding='shift-jis') as f:
+       title = f.readline()
+       author = f.readline()
+
+  ・改行コードを置換して削除する
+   title = title.replace('\n','')
+   print(title)
+   author = author.replace('\n','')
+   print(author)
+  
+  ・テキスト全体を読み込み、結果を行単位のリストで保持する
+    with open(path,mode='r', encoding='shift-jis') as f:
+    content = f.readlines()
+    content  
+  
+  ・リストをdfにいれる
+    import pandas as pd
+    df = pd.DataFrame(content, columns=['text'])
+    df['text'] = df['text'].str.replace('\n','') #改行を一括置換
+    
+  ・文字データから指定文字列が含まれるindexを返す str.contains
+     date = df[(df['text'].str.contains('日公開')) | (df['text'].str.contains('日修正'))].copy() 
+     
+  ・特定の行・列を指定してデータ抽出する場合はiat[]  左が行で右が列の番号
+     release_date = date.iat[0, 0]
+
+ノック５４：形態素解析で単語に分割しよう  
+  ・windows MeCabインストール方法     
+    https://www.fenet.jp/dotnet/column/%E8%A8%80%E8%AA%9E%E3%83%BB%E7%92%B0%E5%A2%83/7805/  
+        
+  ・Mecabを使用する    
+    import MeCab
+    tagger = MeCab.Tagger()
+    body = booklist.iloc[0, 4]
+    parsed = tagger.parse(body).split('\n')
+    parsed[:4]   
+    
+ノック５５：分割した単語をデータフレームで保持しよう 
+    *values, = map(lambda s: re.split(r'\t|,',s), parsed)
+    
+    map()は結果を多次元リストとして保存する
+    parsedを1行ずつ置換処理してリストに格納し、行単位のリストを複数もつイメージ
+    
+    *values, = 　変数の左にアスタリスクがある場合、中身を分割して持つ
+                 アスタリスクによるリストのアンパック
+                 
+ノック５６：名詞と動詞を取り出そう
+  ・名詞と動詞で絞ったデータフレームを作成
+   verb = mecab_df.loc[(mecab_df['品詞']=='名詞')|(mecab_df['品詞']=='動詞')]
+                 
+ノック５７：不要な単語を除外しよう
+  ・stopワードを読み込む
+   with open('100knock-process-visualization/chapter-4/data/stop_words.txt', mode='r',encoding='utf-8') as f:
+   stop_words = f.read().split()
+   stop_words
+   
+  ・stopワードを除外
+   noun = noun.loc[~noun['原形'].isin(stop_words)]  #isinで含まれているかを確認しチルタ~で除外する
+      
+ノック５８：単語の使用状況をグラフで可視化しよう
+  ・名詞の使用回数上位を求めて可視化
+    count = noun.groupby('原形').size().sort_values(ascending=False)
+    count.name = 'count'
+    count = count.reset_index().head(10)
+
+   plt.figure(figsize=(10,5))
+   sns.barplot(x=count['count'], y=count['原形'])
+   
+ノック５9：Word Cloudで可視化してみよう
+   
+   # デフォルトでは2文字以上の単語を表示するようにしている
+   from wordcloud import WordCloud
+   import matplotlib.pyplot as plt
+   font_path = r"C:\WINDOWS\Fonts\msgothic.ttc"
+   cloud = WordCloud(background_color='white', font_path=font_path).generate(' '.join(noun['原形'].values))
+   plt.figure(figsize=(10, 5))
+   plt.imshow(cloud)
+   plt.axis('off')
+   plt.savefig('100knock-process-visualization/chapter-4/data/wc_noun_base_2.png')
+   plt.show()
+   
+  ・1文字の単語も表示する場合はWordCloudの引数regexp="[\w']+"を加える
+     
+   cloud = WordCloud(background_color='white',
+                     font_path=font_path, regexp="[\w']+").generate(' '.join(noun['原形'].values))
+   plt.figure(figsize=(10, 5))
+   plt.imshow(cloud)
+   plt.axis('off')
+   plt.savefig('100knock-process-visualization/chapter-4/data/wc_noun_base_2.png')
+   plt.show()
+   
+   
+ノック６０：n-gramを作ってみよう
+  ・n-gramは文字列や文章を連続するn個の集まりで分割する手法で、
+    1個の場合をuni-gram,2個の場合をbi-gram,3個をtri-gramという 
+    
+      
+  ・データをリスト化しバイグラムにする
+    from nltk import ngrams
+    bigram = ngrams(target, 2) 
+    
+  ・バイグラムで作られた値ごとの出現回数をカウントする
+   import collections
+   counter = collections.Counter(bigram)
+   print(counter)
+   
+第5章:画像データの加工・可視化を行う10本ノック
+
+ノック61:画像ファイルを読み込んでみよう
+   import cv2
+   img = cv2.imread('100knock-process-visualization/chapter-5/data/sample.jpg')
+   img
+   
+ノック62:画像データの中身を確認しよう
+  ・データ形状を確認する
+  img.shape
+  ->(3456, 5184, 3)
+  
+  OpenCVの場合、「高さ×幅×BGR」  ＃一般は「横×縦×RBG」
+
+  ・高さのデータの確認
+     print(img[0])
+     
+  ・横幅のデータの確認     
+    print(img[:,0])
+    
+  ・色情報の固定してデータ確認
+    print(img[:,:,0])
+    
+ノック63: 画像データを切り出してみよう
+  ・スライスして画像を切り出す
+   img_extract = img[700:1200,300:800,:]
+   plt.imshow(img_extract)
+   
+  ・青色のみの画像を表示
+    img_extract2 = img[:,:,0]
+    plt.imshow(img_extract2) 
+    
+ノック64:カラーヒストグラムを可視化してみよう      
+  ・青色のヒストグラムデータを取得
+    hist_b = cv2.calcHist([img],channels=[0],mask=None,histSize=[256],ranges=[0,256])
+  
+    #引数は最初に読み込んだ画像ファイル、2番目に対象の色、ヒストグラム作成する範囲やサイズの指定
+    
+    
+  ・RGBのグラフを作成
+    hist_g = cv2.calcHist([img],channels=[1],mask=None,histSize=[256],ranges=[0,256])
+    hist_r = cv2.calcHist([img],channels=[2],mask=None,histSize=[256],ranges=[0,256])
+
+    plt.plot(hist_r, color='r', label='Red')
+    plt.plot(hist_g, color='g', label='Green')
+    plt.plot(hist_b, color='b', label='Blue')   
+    
+ノック65: RGB変換を行って画像を表示してみよう
+  ・BGRをRGBに変換する
+    img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    plt.imshow(img_rgb)
+    
+    ※cv2_imshow()はBGRの形でデータが来るのを想定
+      matplotlibのimshow()はRGBでデータが来るのを想定
+      
+ノック66: 画像のサイズを変更してみよう
+  ・現状のデータサイズの確認
+    height, width, channels = img.shape
+    print(width, height)
+    
+    
+  ・リサイズを行う
+   img_resized = cv2.resize(img, (500, 300))
+   print(img_resized.shape)
+   img_resized_rgb = cv2.cvtColor(img_resized, cv2.COLOR_BGR2RGB)
+   plt.imshow(img_resized_rgb)
+   
+   ※データの形状は縦×横だがresizeは横×縦で指定
+   
+  ・1/10になるようにリサイズを行う
+   # fx,fyに割合を指定する事で割合をもとにサイズを変更する    
+   img_resized = cv2.resize(img, None, fx=0.1, fy=0.1)
+   print(img_resized.shape)
+   img_resized_rgb = cv2.cvtColor(img_resized, cv2.COLOR_BGR2RGB)
+   plt.imshow(img_resized_rgb)
+   
+  ・1.5倍に拡大する
+   #データ補間はデフォルトでバイリニア補間
+   img_resized_2 = cv2.resize(img_resized, None, fx=1.5, fy=1.5, interpolation=cv2.INTER_NEAREST)
+   print(img_resized_2.shape)
+   img_resized_2_rgb = cv2.cvtColor(img_resized_2, cv2.COLOR_BGR2RGB)
+   plt.imshow(img_resized_2_rgb)
+   
+   ＃最も近い値で補間する
+    img_resized_2 = cv2.resize(img_resized, None, fx=1.5, fy=1.5, interpolation=cv2.INTER_NEAREST)
+    print(img_resized_2.shape)
+    img_resized_2_rgb = cv2.cvtColor(img_resized_2, cv2.COLOR_BGR2RGB)
+    plt.imshow(img_resized_2_rgb)
+    
+ノック67:画像を回転させてみよう
+  ・画像を90度回転させてmatplotlibで表示
+    img_rotated = cv2.rotate(img_resized, cv2.ROTATE_90_CLOCKWISE)
+    img_rotated_rgb = cv2.cvtColor(img_rotated, cv2.COLOR_BGR2RGB)
+    plt.imshow(img_rotated_rgb)
+  
+
+  ・画像を45度回転させてmatplotlibで表示
+    # 45度変換などはアフィン変換が必要
+    # 画像回転の場合、回転の中心を指定する必要あり、高さと横幅を取得し、2で割ることで画像中心を指定
+    # getRotationMatrix2Dでアフィン行列を取得し、warpAffineでアフィン変換を行う
+    
+    height, width = img_resized.shape[:2]
+    center = (int(width/2), int(height/2))
+
+    rot = cv2.getRotationMatrix2D(center, 45, 1)
+    img_torated = cv2.warpAffine(img_resized, rot, (width,height))
+
+    img_torated_rgb = cv2.cvtColor(img_torated, cv2.COLOR_BGR2RGB)
+    plt.imshow(img_torated_rgb)
+    print(img_torated.shape)
+    
+  ・画像を上下反転させてmatplotlibで表示
+  
+   # flipCodeが0は上下反転、0より大きい場合は左右反転、0より小さい場合は上下左右反転
+   img_reverse = cv2.flip(img_resized, 0)
+   img_reverse_rgb = cv2.cvtColor(img_reverse, cv2.COLOR_BGR2RGB)
+   plt.imshow(img_reverse_rgb)
+   print(img_reverse.shape)
+   
+   
+   #numpyのarray順序を入れ替えて左右反転を行う
+   img_reverse = img_resized[:, ::-1, :]
+
+   img_reverse_rgb = cv2.cvtColor(img_reverse, cv2.COLOR_BGR2RGB)
+   plt.imshow(img_reverse_rgb)
+   print(img_reverse.shape)
+    
+ノック68: 画像処理をしてみよう
+  ・グレースケールへの変換
+   img_gray = cv2.cvtColor(img_resized, cv2.COLOR_BGR2GRAY)
+   plt.imshow(img_gray, cmap='gray')
+
+  ・2値化(黒が0、白が255)しか値を持たないようにする  
+   # 60は閾値、255は閾値以上だった場合に設定する値
+   th, img_th = cv2.threshold(img_gray, 60,255, cv2.THRESH_BINARY)
+   plt.imshow(img_th, cmap='gray')
+   print(img_th.shape)
+    
+  ・画像を平滑化(ぼかし)をいれる  
+   img_smoothed = cv2.blur(img_resized,(8,8))
+   img_smoothed_rgb = cv2.cvtColor(img_smoothed, cv2.COLOR_BGR2RGB)
+   plt.imshow(img_smoothed_rgb)
+   print(img_smoothed.shape)
+   
+   # ぼかしを強くする
+   img_smoothed = cv2.blur(img_resized,(20,20))
+   img_smoothed_rgb = cv2.cvtColor(img_smoothed, cv2.COLOR_BGR2RGB)
+   plt.imshow(img_smoothed_rgb)
+   print(img_smoothed.shape)
+   
+ノック69: 画像にテキストや線を描画してみよう  
+  ・画像にテキストを描画
+  
+   # putTextを使用すると画像にテキストを描画出来る
+   # 画像の位置は左上が0,0
+   text = '9'
+   xy = (200, 100)
+   font = cv2.FONT_HERSHEY_COMPLEX
+   font_scale = 2
+   color = (0, 0, 255)
+   thickness = 2
+
+   img_text = cv2.putText(img_resized.copy(), text, xy, font, font_scale, color, thickness)
+   img_text_rgb = cv2.cvtColor(img_text, cv2.COLOR_BGR2RGB)
+   plt.imshow(img_text_rgb)
+
+  ・画像に四角形を描画
+    # cv2.rectangleを使用する
+    x0, y0 = 200, 70
+    x1, y1 = 350, 330
+    color = (0, 0, 255)
+    thickness = 3
+
+    img_rect = cv2.rectangle(img_resized.copy(),(x0,y0),(x1,y1),color,thickness)
+    img_rect_rgb = cv2.cvtColor(img_rect, cv2.COLOR_BGR2RGB)
+    plt.imshow(img_rect_rgb)
+
+ノック70:画像を保存してみよう
+  ・画像を保存する
+    cv2.imwrite('100knock-process-visualization/chapter-5/data/sample_resized.jpg', img_resized)
+    
+    # pngは可逆圧縮データ形式、jepgは非可逆圧縮で基本的にはデータを保存するたびに劣化する
+    
+
+第6章: 音データの加工・可視化を行う10本ノック 
+ノック71:音データを再生してみよう
+  ・jupyter notebookで音声を聞く
+  
+   import IPython.display as disp
+   disp.Audio('100knock-process-visualization/chapter-6/data/音声.mp3')
+   
+ノック72:音データを読み込んでみよう
+  ・Librosaで音データを読み込む
+    
+    import librosa
+    # MP3を認識するためにffmpegが必要
+    # conda install -c conda-forge ffmpeg 
+    
+    # sr=Noneにしないと22050Hzで統一される
+    audio1, sr1 = librosa.load('100knock-process-visualization/chapter-6/data/音声.mp3',sr=None)
+    print(audio1)  # 音の数値データ
+    print(sr1)     # サンプリングデータ
+
+  ・音データの情報を確認
+    print(audio1.shape)
+    print(audio1.max())
+    print(audio1.min()) 
+    
+ノック73: 音データの一部を取得してみよう    
+  ・2秒あったデータを1秒に変える
+    # durationで1秒にする
+    audio2, sr2 = librosa.load('100knock-process-visualization/chapter-6/data/携帯電話着信音.mp3',sr=None, offset=0, duration=1)
+    print(audio2)
+    print(sr2)
+    print(audio2.shape)   
+        
+  ・切り出したデータを再生する
+    # サンプリングレートも指定する
+    disp.Audio(data=audio2, rate=sr2)
+    
+ノック74:音データのサンプリングレートを変えてみよう
+  ・音源データを44100Hzの半分である22050Hzで読み込む
+   audio1_sr22, sr1_sr22 = librosa.load('100knock-process-visualization/chapter-6/data/音声.mp3',sr=22050, offset=0, duration=1)
+   print(audio1_sr22)
+   print(sr1_sr22)
+   print(audio1_sr22.shape)
+   
+  ・読み込んだデータをリサンプリングする
+   audio1_sr8 = librosa.resample(audio1, sr1, 8000)
+   print(audio1_sr8)
+   print(audio1_sr8.shape)
+   
+  ・サンプリングデータの取得
+   librosa.get_samplerate('100knock-process-visualization/chapter-6/data/音声.mp3')
+   
+ノック75: 音データを可視化してみよう
+  ・音データの可視化
+    import librosa.display as libdisp
+    libdisp.waveplot(audio1, sr=sr1) 
+    
+ノック76: 音データの大きさを取得してみよう
+  ・全体の平均を算出する
+    import numpy as np
+    audio1_rms = np.sqrt(np.mean(audio1**2))  
+    
+  ・時間別に細かく切ってRMS(toot mean square)を算出  
+    rms1 = librosa.feature.rms(y=audio1)
+    time1 = librosa.times_like(rms1, sr=sr1)
+    
+  ・可視化する
+    plt.plot(time1, rms1[0], label='audio1')
+    
+ノック77: 周波数スペクトルを表示してみよう    
+  ・音の分解をフーリエ変換で実施する
+   fft = np.fft.fft(audio1) #フーリエ変換する
+   n = fft.size             # サンプル件数を入れる（例:44100件)
+   amp = np.abs(fft)
+   freq = np.fft.fftfreq(n, d=1 / sr1) #横軸を取得
+   print(amp.shape)
+   print(amp.max())
+   print(amp.min())
+   print(freq.max())
+   print(freq.min()) 
+   
+  ・グラフ化する  
+   plt.figure(figsize=(10, 5))
+   plt.plot(freq[:n//2], amp[:n//2])
+   plt.xlabel('Frequency [Hz]')
+   plt.ylabel('Amplitude')
+   
+ノック78: スペクトログラムを可視化してみよう   
+  ・周波数成分の時間変化をスペクトログラムという
+    特定の大きさの窓をスライドさせながらフーリエ変換する 
+    
+    
+    stft = librosa.stft(audio1)  # 短時間フーリエ変換
+    amps = np.abs(stft)
+    spectrogram = librosa.amplitude_to_db(amps) #振幅からデシベルに変換する
+    print(stft.shape)
+    print(amps.shape)
+    print(spectrogram.shape)
+    
+    スペクトログラムの可視化
+    plt.figure(figsize=(10, 5))
+    librosa.display.specshow(spectrogram, sr=sr1, x_axis='time', y_axis='hz', cmap='magma')
+    bar = plt.colorbar()
+    bar.ax.set_ylabel('db') 
+    
+ノック79: 音の高さや長さを変えてみよう    
+  ・音声の高さ(ピッチ)を変える
+    # 引数はデータ、サンプリングデータ、ピッチのステップ数
+    # ピッチステップ数を高くすると高音、マイナスなど低くすると低温になる
+    audio1_pitch = librosa.effects.pitch_shift(audio1, sr1, 10)
+    
+  ・時間を長く間延びさせる
+    # 引数が１より大きければスピードアップ、1未満であればスピードダウン
+    audio2_time = librosa.effects.time_stretch(audio2, 0.5)
+    
+ノック80:音データを保存しよう
+  ・wav形式で保存する
+   import soundfile as sf
+   sr = 44100
+   sf.write('100knock-process-visualization/chapter-6/data/audio2_time.wav', audio2_time, sr) 
+   
+第7章 機械学習の前処理を行う10本ノック
+ノック81: 機械学習で予測するデータを設定しよう
+  ・目的変数を設定する
+  label = dataset.pop('survived')
+
+ノック82: TrainデータとTestデータに分割しよう
+   
+   # stratifyは均等に分割したいデータを指定する
+   from sklearn.model_selection import train_test_split
+   train_ds, test_ds, train_label, test_label=train_test_split(dataset,label, random_state=2021, stratify=label)
+
+ノック83:データを機械学習に適した形式へ変換しよう
+  ・機械学習で使用すべきでないデータ
+    目的変数と直接的に関係あるデータ、説明変数間でほぼ同じデータなど
+
+   # 不要カラムの削除
+    train_ds.drop(columns=['embark_town', 'alive'],inplace=True)
+    
+  ・one-hotエンコーディング
+    import pandas as pd
+    one_hot_encoded = pd.get_dummies(train_ds)
+    one_hot_encoded.head()  
+    
+    ※カテゴリカル変数を横持ちにした場合、1つ列を消すことが多い
+    
+  ・特定の列のみget_dummiesを行う
+    one_hot_encoded = pd.get_dummies(one_hot_encoded, columns=['pclass'])
+      
+  ・replaceを使ってTrueを1、Falseを0に変換
+    one_hot_encoded = one_hot_encoded.replace({True: 1, False: 0})
+
+      
+  ・ラベルを他のid(数値)にエンコーディングする
+    from sklearn.preprocessing import LabelEncoder
+    label_encoded = train_ds.copy()
+    class_encoder = LabelEncoder()
+    label_encoded['class'] = class_encoder.fit_transform(label_encoded['class'])     
+    
+
+ノック84: 外れ値の検出をしよう    
+  ・下から1/4番目のサンプル値を1/4quantile,3/4番目のサンプル値を3/4quantileと呼ぶ
+    3/4quantileと1/4quantileの差をIQRという　
+        
+  ・外れ値を計算して外れ値の数を確認する
+    q = train_ds.quantile([1 /4, 3/4])
+    q1, q3 = q.loc[1/4 ], q.loc[ 3/4]
+    iqr = q3 - q1
+    mx = q3 + 1.5 * iqr
+    mn = q1 - 1.5 * iqr   
+        
+    ((train_ds > mx) | (train_ds < mn)).sum()
+    
+ノック85: データの分布をみてスケーリング手法を考えよう    
+  ・各変数の基本統計量を計算する    
+    train_ds.describe()
+        
+  ・一様分布の判定にカイ2乗検定を使う
+   from scipy import stats
+   import numpy as np
+   bins, bin_edges = np.histogram(train_ds['age'].dropna(), bins='auto')
+   stat, p = stats.chisquare(bins)
+   f'x二乗検定のp値: {p}' # p >= 0.05ではないので一様ではない 
+   
+  ・正規分布かの判定にシャピロウィルク検定を使う   
+   stat, p = stats.shapiro(bins)
+   f'シャピロウィルク検定のp値: {p}' # p >= 0.05なので正規性がある
+   
+   一様分布でも正規分布でもないような分布や外れ値が含まている分布はロバストケーリングを使う
+   
+ノック86: 分布に従ってスケーリングをやってみよう
+  ・標準化はStandardScaler,ロバストスケーリングはRobustScaler   
+   
+  ・各値にスケーラーをセットして変換する
+    from sklearn.preprocessing import RobustScaler, StandardScaler
+
+    age_scaler   = StandardScaler()
+    sibsp_scaler = RobustScaler()
+    
+    train_ds['age'] = age_scaler.fit_transform(train_ds['age'].values.reshape(-1,1))
+    train_ds['sibsp'] = sibsp_scaler.fit_transform(train_ds['sibsp'].values.reshape(-1,1))
+    
+ノック87:スケーラーを保存しよう
+  ・pickle形式でスケーラーを保存
+    import pickle
+     with open('100knock-process-visualization/chapter-7/data/scalers/age_scaler.pkl',mode='wb') as f:
+    pickle.dump(age_scaler, f)
+
+  ・pikleデータの読み込みとTestデータのスケーリング
+    with open('100knock-process-visualization/chapter-7/data/scalers/age_scaler.pkl', mode='rb') as f:
+    saveage_scaler = pickle.load(f)
+    
+    age_scaled = test_ds.copy()
+    age_scaled['age'] = save
+     
+ノック88:欠損値の処理をやってみよう
+  ・欠損値の確認
+   train_ds.isna().sum()
+   
+  ・欠損値を中央値で補間
+    from sklearn.impute import SimpleImputer
+
+    age_imputer = SimpleImputer(strategy='median')
+    train_ds['age'] = age_imputer.fit_transform(train_ds['age'].values.reshape(-1,1))
+    train_ds 
+    
+ノック89: 学習時のサンプル比率を調整しよう
+  ・目的変数の件数を確認
+   train_label.value_counts()
+     
+  ・アンダーサンプリングを実施
+   # モジュールインストール必要
+   # conda install -c conda-forge imbalanced-learn
+
+   from imblearn.under_sampling import RandomUnderSampler
+   under_sampler = RandomUnderSampler(random_state=2021)
+   under_sampled_train_ds, under_sampled_train_label = under_sampler.fit_resample(train_ds, train_label)
+   under_sampled_train_ds.shape
+   
+  ・オーバーサンプリングを実施   
+   from imblearn.over_sampling import RandomOverSampler 
+   over_sampler = RandomOverSampler(random_state=2021)
+   over_sampled_train_ds, over_sampled_train_label = over_sampler.fit_resample(train_ds, train_label)
+   over_sampled_train_ds.shape
+   
+ノック90: Testデータの前処理をしよう   
+  ・カテゴリ変数を変換するとTrainデータには変数として存在するがTestデータには存在しない状況がある。
+    項目の不一致を修正する必要がある
+    
+    test_ds = test_ds.merge(train_ds, how='left')
+    test_ds = test_ds[train_ds.columns]
+    test_ds
+
+第8章 特殊なデータ加工・可視化10ノック
+ノック91:大容量CSVデータを扱ってみよう
+  ・引数で行数を指定していデータを読み込む
+  for df in pd.read_csv('100knock-process-visualization/chapter-8/data/person_count_out_0001_2021011509.csv', chunksize=512):
+    print(df.shape)
+    
+    
+  ・chunkごとに処理を実行
+    i = 0
+    for df in pd.read_csv('data/person_count_out_0001_2021011509.csv',chunksize=64):
+        df['proceed_per_chunck'] = True
+        df.to_csv('data/processed_big_data.csv', mode='a', index=False, header=i ==0)
+        i += 1 
+    
+ノック92:Json形式のファイルを扱ってみよう
+   pd.read_json('100knock-process-visualization/chapter-8/data/column_oriented.json')
+     
+  ・インデックス指向のJsonファイルの場合、orientの指定が必要になる
+   pd.read_json('100knock-process-visualization/chapter-8/data/index_oriented.json', orient='index')   
+
+  ・テーブル指向のデータの場合はorient='table'とする
+  pd.read_json('100knock-process-visualization/chapter-8/data/table_oriented.json', orient='table')
+  
+ノック93: Webからデータを取得してみよう
+  ・requestを使ってデータを読み取る
+    import requests
+    response = requests.get('https://worldtimeapi.org/api/timezone/Asia/Tokyo')
+    response.content
+    
+  ・辞書に変換する
+    result = response.json()
+    result  
+    
+  ・Pandas.Seriesに変換
+    pd.Series(result)    
+    
+  ・結果を保存する
+    import json
+
+    with open('100knock-process-visualization/chapter-8/data/response.json', mode='w') as f:
+        json.dump(result,f)  
+
+  ・1秒おきに同じurlにリクエストし同じファイルに結果を追記する
+    import time
+
+for _ in range(4):
+    response = requests.get('https://worldtimeapi.org/api/timezone/Asia/Tokyo')
+    with open('100knock-process-visualization/chapter-8/data/responses.txt',mode='a') as f:
+        res = response.json()
+        f.write(f'{json.dumps(res)}\n')
+    time.sleep(1)      
+    
+ノック94:configフィアルを扱ってみよう
+  ・Yamlファイルを読み込む
+   import yaml
+   with open('100knock-process-visualization/chapter-8/config.yml',mode='r') as f:
+       config = yaml.load(f)
+   config
+
+  ・tomlファイルを読み込む
+    import toml
+    with open('100knock-process-visualization/chapter-8/config.toml',mode='r') as f:
+        config = toml.load(f)
+    config
+    
+ノック95:動画ファイルを音声ファイルへ変換してみよう  
+  ・Jupyterlabで動画を見る
+   from IPython.display import Video
+   Video('100knock-process-visualization/chapter-8/data/sample_video.mp4')
+   
+  ・動画ファイルを音声へ変換
+    from moviepy.editor import VideoFileClip
+
+    video_clip = VideoFileClip('100knock-process-visualization/chapter-8/data/sample_video.mp4')
+    video_clip.audio.write_audiofile('100knock-process-visualization/chapter-8/data/audio_by_py.mp3') 
+             
+ノック96:動画ファイルを画像ファイルへ分割してみよう
+
+    import cv2
+    from tqdm import trange  # 処理の進捗状況を可視化する
+    import os
+
+    cap = cv2.VideoCapture('100knock-process-visualization/chapter-8/data/sample_video.mp4')
+    img_dir = '100knock-process-visualization/chapter-8/data/images_by_py/'
+    os.makedirs(img_dir,exist_ok=1)
+    n = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) #動画ファイルのフレーム数を取得
+
+    for i in trange(n):
+        success, img = cap.read()
+        if not success:
+            continue
+        cv2.imwrite(f'{img_dir}/{i:04}.png', img) 
+
+ノック97: PowerPointやWordファイルを読み込んでみよう
+    # 事前にインストール必要
+    # conda install -c conda-forge python-pptx, conda install -c conda-forge python-docx
+
+  ・Powerpointを読み込む
+    import pptx
+    pptx_data = pptx.Presentation('100knock-process-visualization/chapter-8/data/サンプル_PowerPoint.pptx')
+    len(pptx_data.slides)
+
+  ・Powerpointの1ページ目を読み込む
+    sld_0 = pptx_data.slides[0]
+    shp_sld_0 = sld_0.shapes   #テキストボックス等の数を数える
+    len(shp_sld_0)
+    
+  ・テキストの取得
+    print(shp_sld_0[0].text)   # シェイプの中の情報を取得
+    print(shp_sld_0[0].has_text_frame)  # シェイプの中身がテキストかどうか判別する
+    
+  ・PowerPointの全テキスト情報を取得
+    pptx_dadta = pptx.Presentation('data/サンプル_PowerPoint.pptx')
+    texts = []
+    for slide in pptx_data.slides:
+        for shape in slide.shapes:
+            if shape.has_text_frame:
+                texts.append(shape.text)
+    print(texts)
+    
+    
+  ・Wordのparagraphの取得
+    import docx
+    docx_data = docx.Document('100knock-process-visualization/chapter-8/data/サンプル_Word.docx')
+    len(docx_data.paragraphs)    
+    
+  ・テキストの取得
+    docx_data.paragraphs[0].text
+        
+  ・Wordの全テキスト情報を取得
+   texts = []
+   for paragraph in docx_data.paragraphs:
+       texts.append(paragraph.text)
+   print(texts)   
+  
+ノック98: PDFデータを読み込んでみよう  
+     
+  ・モジュールのインポート
+   from pdfminer.pdfinterp import PDFResourceManager, PDFPageInterpreter #PDF内のリソース管理,取得したページを解析する
+   from pdfminer.converter import TextConverter # テキストを取り出す機能
+   from pdfminer.pdfpage import PDFPage # PDFを1ページずつ取得する
+   from pdfminer.layout import LAParams # PDFパラメータを保持
+   
+・pdfminerはあらかじめ読み取った情報を保存するテキストファイルを開いておいて、
+  そこに読み込み結果を書き込む形となっている
+    
+  pdf_data = open('100knock-process-visualization/chapter-8/data/サンプル_PDF.pdf', 'rb')
+  txt_file = '100knock-process-visualization/chapter-8/data/サンプル_PDF.txt'
+  out_data = open(txt_file, mode='w')
+
+  rscmgr = PDFResourceManager()
+  laprms = LAParams()
+  device = TextConverter(rscmger, out_data, laparams=laprms)
+  itprtr = PDFPageInterpreter(rscmgr, device)
+
+  for page in PDFPage.get_pages(pdf_data):
+      itprtr.process_page(page)
+      
+  out_data.close()
+  device.close()
+  pdf_data.close()  
+  
+・出力したpdfテキスト情報の読み込みを行う
+  with open('100knock-process-visualization/chapter-8/data/サンプル_PDF.txt',mode='r') as f:
+      content = f.read()
+  print(content)
+  
+ノック99: インタラクティブなグラフを作成してみよう
+
+・plotlyモジュールを使ってインタラクティブな可視化を行う
+  ※インストール方法※
+  # https://morinokabu.com/2021/10/02/jupyter-lab_plotly/を参考にinstall
+  """
+  まずNode.jsをインストール
+  コマンドプロンプトで以下を実行していく
+  conda install -c plotly plotly=4.8.2
+  pip install jupyterlab "ipywidgets>=7.5"
+  jupyter labextension install jupyterlab-plotly@4.8.2
+  jupyter labextension install @jupyter-widgets/jupyterlab-manager plotlywidget@4.8.2
+  最後にjupyter labを再起動する
+  """
+        
+・折れ線グラフを作成
+   import plotly.express as px
+   fig = px.line(x=df['receive_time'], y=df['in1'])
+   fig.show();  
+   
+・2変数の折れ線グラフを可視化
+   fig = px.line(df_v, x='receive_time', y='値', color='変数名')
+   fig.show()
+   
+ノック100: 3次元グラフを作成してみよう
+・2次元の散布図で可視化
+   fig = px.scatter(df_iris, x='sepal_length', y='sepal_width', color='species')
+   fig.show()
+   
+・3次元グラフの可視化   
+   fig = px.scatter_3d(df_iris, x='sepal_length', y='sepal_width', z='petal_width', color='species')
+   fig.show() 
